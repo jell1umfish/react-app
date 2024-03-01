@@ -3,6 +3,7 @@ import {ethers} from 'ethers';
 import { contractAbi, contractAddress } from './Constant/constant';
 import Login from './Components/Login'
 import Connected from './Components/Connected';
+import Finished from './Components/Finished';
 import './App.css';
 
 function App() {
@@ -13,24 +14,29 @@ function App() {
   const [remainingTime, setRemainingTime] = useState('');
   const [candidates, setCandidates] = useState([]);
   const [number, setNumber] = useState('');
-  const [CanVote, setCanVote] = useState(true);
+  const [canVote, setCanVote] = useState(true);
+  const [winner, setWinner] = useState('');
 
 
 
-  useEffect( () =>{
+
+
+  useEffect(() => {
+    setVotingStatus(true);
     getCandidates();
     getRemainingTime();
     getCurrentStatus();
     if(window.ethereum) {
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
+        window.ethereum.on('accountsChanged', handleAccountsChanged);
     }
 
-    return() =>{
-      if(window.ethereum){
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-      }
+    return () => {
+        if(window.ethereum){
+            window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        }
     }
-  });
+}, []);
+
 
   async function vote(){
     const provider = new ethers.providers.Web3Provider(window.ethereum);
@@ -133,21 +139,67 @@ function App() {
     setNumber(e.target.value);
   }
 
+  async function finishVoting() {
+    setVotingStatus(false);
+    try {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      await provider.send("eth_requestAccounts", []);
+      const signer = provider.getSigner();
+      const contractInstance = new ethers.Contract(contractAddress, contractAbi, signer);
+      await contractInstance.finishVoting(); 
+      console.log("Voting finished successfully");
+  
+      await getCandidates();
+  
+      const winnerName = determineWinner(candidates);
+      setWinner(winnerName);
+    } catch (error) {
+      console.error("Error finishing voting:", error);
+    }
+  }
+
+  function determineWinner(candidates) {
+    if (candidates.length === 0) {
+      return "No candidates available";
+    }
+  
+    let maxVotes = candidates[0].voteCount;
+    let winnerName = candidates[0].name;
+  
+    for (let i = 1; i < candidates.length; i++) {
+      if (candidates[i].voteCount > maxVotes) {
+        maxVotes = candidates[i].voteCount;
+        winnerName = candidates[i].name;
+      }
+    }
+  
+    return winnerName;
+  }
+  
+
   return (
     <div className="App">
-      {isConnected ? (<Connected 
-                      account = {account}
-                      candidates= {candidates}
-                      remainingTime={remainingTime}
-                      number={number}
-                      handleNumberChange = {handleNumberChange}
-                      voteFunction = {vote}
-                      showButton = {canvote}/>) : (<Login connectWallet = {connectToMetamask}/>)}
-
+      {votingStatus ? (
+        isConnected ? (
+          <Connected
+            account={account}
+            candidates={candidates}
+            remainingTime={remainingTime}
+            number={number}
+            handleNumberChange={handleNumberChange}
+            voteFunction={vote}
+            showButton={canVote}
+            showFinishButton={true} 
+            finishVoting={finishVoting} 
+          />
+        ) : (
+          <Login connectWallet={connectToMetamask} />
+        )
+      ) : (
+        <Finished winner={winner} />
+      )}
     </div>
   );
 }
-
-
 
 export default App;
